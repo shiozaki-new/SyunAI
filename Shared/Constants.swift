@@ -3,6 +3,8 @@ import Foundation
 enum AppConstants {
     // MARK: - App Info
     static let appVersion = "2.0.0"
+    static let appBuild = "2"
+    static let appVersionDisplay = "\(appVersion) (\(appBuild))"
     static let appName = "瞬愛 SyunAI"
 
     // MARK: - Local Model Configuration

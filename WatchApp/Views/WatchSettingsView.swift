@@ -37,7 +37,7 @@ struct WatchSettingsView: View {
                         Text("瞬愛 SyunAI")
                             .font(.caption2)
                         Spacer()
-                        Text("v2.0.0")
+                        Text(AppConstants.appVersionDisplay)
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }

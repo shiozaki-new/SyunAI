@@ -197,7 +197,7 @@ struct OnboardingView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.cyan)
 
-            Text("瞬愛 SyunAI v2")
+            Text("瞬愛 SyunAI \(AppConstants.appVersionDisplay)")
                 .font(.largeTitle.bold())
 
             Text("Apple Watchで\n瞬時にAIに聞ける\n完全ローカル・無料")
