@@ -30,6 +30,10 @@ class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
         try? session.updateApplicationContext(payload)
     }
 
+    private var hasDownloadedModel: Bool {
+        FileManager.default.fileExists(atPath: LocalLLMService.defaultModelPath)
+    }
+
     // MARK: - WCSessionDelegate
 
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
@@ -70,7 +74,7 @@ class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
     private func handleMessage(_ message: [String: Any], replyHandler: (([String: Any]) -> Void)?) {
         // Watch is requesting model status
         if message[AppConstants.wcModelStatusRequestKey] != nil {
-            let isReady = UserDefaults.standard.bool(forKey: AppConstants.modelReadyKey)
+            let isReady = hasDownloadedModel
             replyHandler?([AppConstants.wcModelStatusKey: isReady])
             return
         }
@@ -88,8 +92,14 @@ class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
         }
 
         // Run LLM inference
-        Task {
+        Task { @MainActor in
             do {
+                guard hasDownloadedModel else {
+                    replyHandler?([AppConstants.wcInferenceErrorKey: "モデルが準備されていません。iPhoneアプリでモデルをダウンロードしてください。"])
+                    return
+                }
+
+                try LocalLLMService.shared.ensureModelLoaded()
                 let systemPrompt = UserDefaults.standard.string(forKey: AppConstants.systemPromptKey)
                     ?? AppConstants.defaultSystemPrompt
                 let response = try await LocalLLMService.shared.generate(

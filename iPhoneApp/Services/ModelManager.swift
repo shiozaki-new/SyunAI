@@ -16,7 +16,9 @@ class ModelManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        isModelReady = modelFileExists
+        let exists = modelFileExists
+        isModelReady = exists
+        UserDefaults.standard.set(exists, forKey: AppConstants.modelReadyKey)
     }
 
     // MARK: - File Paths
@@ -74,6 +76,7 @@ class ModelManager: NSObject, ObservableObject {
     func deleteModel() {
         try? FileManager.default.removeItem(atPath: modelFilePath)
         isModelReady = false
+        error = nil
         UserDefaults.standard.set(false, forKey: AppConstants.modelReadyKey)
     }
 
@@ -83,7 +86,7 @@ class ModelManager: NSObject, ObservableObject {
         guard modelFileExists else {
             throw LLMError.modelFileNotFound
         }
-        try LocalLLMService.shared.loadModel(at: modelFilePath)
+        try LocalLLMService.shared.ensureModelLoaded(at: modelFilePath)
         isModelReady = true
         UserDefaults.standard.set(true, forKey: AppConstants.modelReadyKey)
     }
@@ -102,12 +105,13 @@ extension ModelManager: URLSessionDownloadDelegate {
 
                 isDownloading = false
                 downloadProgress = 1.0
-                isModelReady = true
-                UserDefaults.standard.set(true, forKey: AppConstants.modelReadyKey)
+                self.downloadTask = nil
 
-                // Auto-load
+                // Auto-load and only then mark as ready
                 try await loadModelIntoService()
             } catch {
+                isModelReady = false
+                UserDefaults.standard.set(false, forKey: AppConstants.modelReadyKey)
                 self.error = "モデル保存エラー: \(error.localizedDescription)"
                 isDownloading = false
             }
@@ -131,6 +135,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         guard let error else { return }
         if (error as NSError).code == NSURLErrorCancelled { return }
         Task { @MainActor in
+            self.downloadTask = nil
             self.error = "ダウンロードエラー: \(error.localizedDescription)"
             isDownloading = false
         }

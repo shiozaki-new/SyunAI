@@ -155,8 +155,12 @@ struct PhoneHomeView: View {
                 // Auto-load model if already downloaded
                 if modelManager.modelFileExists && !LocalLLMService.shared.isModelLoaded {
                     Task {
-                        try? await modelManager.loadModelIntoService()
-                        connectivity.sendModelStatusToWatch(isReady: true)
+                        do {
+                            try await modelManager.loadModelIntoService()
+                            connectivity.sendModelStatusToWatch(isReady: true)
+                        } catch {
+                            connectivity.sendModelStatusToWatch(isReady: false)
+                        }
                     }
                 }
             }

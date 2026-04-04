@@ -13,11 +13,23 @@ class LocalLLMService: ObservableObject {
     static let shared = LocalLLMService()
     private init() {}
 
+    nonisolated static var defaultModelPath: String {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return docs
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(AppConstants.modelFileName)
+            .path
+    }
+
     // MARK: - Model Lifecycle
 
     func loadModel(at path: String) throws {
         guard FileManager.default.fileExists(atPath: path) else {
             throw LLMError.modelFileNotFound
+        }
+
+        if isModelLoaded {
+            unloadModel()
         }
 
         llama_backend_init()
@@ -43,6 +55,11 @@ class LocalLLMService: ObservableObject {
         }
         self.context = ctx
         self.isModelLoaded = true
+    }
+
+    func ensureModelLoaded(at path: String? = nil) throws {
+        guard !isModelLoaded else { return }
+        try loadModel(at: path ?? Self.defaultModelPath)
     }
 
     func unloadModel() {
