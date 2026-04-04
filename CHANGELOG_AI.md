@@ -36,7 +36,10 @@
 - `iPhoneApp/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - `iPhoneApp/Assets.xcassets/AccentColor.colorset/Contents.json` - シアンカラー
 - `iPhoneApp/Assets.xcassets/Contents.json`
-- `WatchApp/Assets.xcassets/` (同構造)
+- `WatchApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png` - Watch用アイコン (iPhone側と同一ソース)
+- `WatchApp/Assets.xcassets/AppIcon.appiconset/Contents.json`
+- `WatchApp/Assets.xcassets/AccentColor.colorset/Contents.json`
+- `WatchApp/Assets.xcassets/Contents.json`
 
 ### ドキュメント
 - `WORKLOG.md` - 作業ログ

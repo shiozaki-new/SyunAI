@@ -36,6 +36,8 @@
 - CoreSimulator/actool問題 (AssetCatalogSimulatorAgent起動失敗)
   - Watch/iPhone双方のAsset Catalogをビルドから除外して回避
   - この問題はMac再起動で解消される既知のシステムバグ
+- repo の最終状態としては Asset Catalog を再度有効化し、`WatchApp/Assets.xcassets` も追加済み
+- 再起動なしでは iPhone / Watch とも `actool --output-partial-info-plist` が同じエラーで再現することを確認
 
 ### Phase 4: Archive
 - `xcodebuild archive` 成功 (Assets除外状態)
@@ -52,6 +54,7 @@
 
 ### Phase 6: アップロード (未完了)
 - Distribution証明書が未作成のため `xcodebuild -exportArchive` 失敗
+- Xcodeの Accounts 設定が空であることを確認 (`Failed to Use Accounts`)
 - Xcode GUIからのアップロードが必要
 
 ### Phase 7: GitHub

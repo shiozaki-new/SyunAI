@@ -17,6 +17,7 @@
 - [x] GitHubリポジトリ作成・push
 - [x] Info.plist (ITSAppUsesNonExemptEncryption: false 設定済)
 - [x] アプリアイコン作成 (1024x1024)
+- [x] Asset Catalog設定を repo 上で復帰 (iPhone / Watch)
 
 ## 未完了項目
 - [ ] Mac再起動してAsset Catalog付きarchive
@@ -28,4 +29,5 @@
 
 ## 人間の操作が必要な箇所
 1. **Mac再起動** - CoreSimulator/actoolの修復に必要
-2. **Xcode Organizerからアップロード** - Distribution証明書の自動作成にXcode GUIが必要
+2. **XcodeのAccounts設定確認** - この Mac の Xcode には現在 Apple ID が未登録で、CLI export は `Failed to Use Accounts`
+3. **Xcode Organizerからアップロード** - Distribution証明書の自動作成にXcode GUIが必要

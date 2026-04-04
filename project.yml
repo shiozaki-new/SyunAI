@@ -24,14 +24,13 @@ targets:
       - path: WatchApp
         excludes:
           - "**/*.entitlements"
-          - "**/*.xcassets"
       - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syunai.app.watchkitapp
         INFOPLIST_FILE: WatchApp/Info.plist
         CODE_SIGN_ENTITLEMENTS: WatchApp/SyunAI.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SKIP_INSTALL: true
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         PRODUCT_NAME: "SyunAI WatchApp"
@@ -49,14 +48,13 @@ targets:
       - path: iPhoneApp
         excludes:
           - "**/*.entitlements"
-          - "**/*.xcassets"
       - path: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.syunai.app
         INFOPLIST_FILE: iPhoneApp/Info.plist
         CODE_SIGN_ENTITLEMENTS: iPhoneApp/SyunAI.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_NAME: "SyunAI"
         GENERATE_INFOPLIST_FILE: false
