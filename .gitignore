@@ -1,0 +1,20 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+*.xcworkspace/
+build/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# CocoaPods / SPM
+Pods/
+.build/
+
+# Generated
+*.ipa
+*.dSYM.zip
+*.dSYM
