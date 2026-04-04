@@ -10,9 +10,15 @@ struct WatchSettingsView: View {
             List {
                 Section("接続状態") {
                     HStack {
-                        Image(systemName: viewModel.hasAPIKey ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundColor(viewModel.hasAPIKey ? .green : .red)
-                        Text(viewModel.hasAPIKey ? "APIキー設定済" : "未設定")
+                        Image(systemName: viewModel.isPhoneReachable ? "iphone.radiowaves.left.and.right" : "iphone.slash")
+                            .foregroundColor(viewModel.isPhoneReachable ? .green : .red)
+                        Text(viewModel.isPhoneReachable ? "iPhone 接続中" : "iPhone 未接続")
+                            .font(.caption)
+                    }
+                    HStack {
+                        Image(systemName: viewModel.isModelReady ? "brain" : "arrow.down.circle")
+                            .foregroundColor(viewModel.isModelReady ? .green : .orange)
+                        Text(viewModel.isModelReady ? "モデル準備完了" : "モデル未準備")
                             .font(.caption)
                     }
                 }
@@ -31,10 +37,13 @@ struct WatchSettingsView: View {
                         Text("瞬愛 SyunAI")
                             .font(.caption2)
                         Spacer()
-                        Text("v1.0.0")
+                        Text("v2.0.0")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
+                    Text("ローカル推論・無料版")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
             .navigationTitle("設定")

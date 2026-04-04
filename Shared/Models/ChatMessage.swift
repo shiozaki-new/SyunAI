@@ -12,14 +12,6 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         self.role = role
         self.timestamp = timestamp
     }
-
-    /// Convert to Google AI API message format
-    var apiMessage: [String: Any] {
-        return [
-            "role": role == .user ? "user" : "model",
-            "parts": [["text": content]]
-        ]
-    }
 }
 
 enum MessageRole: String, Codable {

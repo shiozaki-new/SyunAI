@@ -8,8 +8,10 @@ struct WatchHomeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if !viewModel.hasAPIKey {
-                    noAPIKeyView
+                if !viewModel.isPhoneReachable {
+                    phoneNotConnectedView
+                } else if !viewModel.isModelReady {
+                    modelNotReadyView
                 } else if viewModel.messages.isEmpty {
                     emptyStateView
                 } else {
@@ -36,19 +38,34 @@ struct WatchHomeView: View {
                     .environmentObject(viewModel)
             }
             .onAppear {
-                viewModel.checkAPIKey()
+                viewModel.checkModelStatus()
             }
         }
     }
 
-    // MARK: - No API Key
+    // MARK: - Phone Not Connected
 
-    private var noAPIKeyView: some View {
+    private var phoneNotConnectedView: some View {
         VStack(spacing: 8) {
-            Image(systemName: "key.fill")
+            Image(systemName: "iphone.slash")
                 .font(.title2)
                 .foregroundColor(.orange)
-            Text("iPhoneアプリで\nAPIキーを設定")
+            Text("iPhoneに\n接続してください")
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+
+    // MARK: - Model Not Ready
+
+    private var modelNotReadyView: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle")
+                .font(.title2)
+                .foregroundColor(.orange)
+            Text("iPhoneアプリで\nモデルを準備")
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
@@ -94,7 +111,7 @@ struct WatchHomeView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
-                            .id(UUID())
+                            .id("loading")
                         }
                     }
                     .padding(.horizontal, 4)
@@ -103,8 +120,6 @@ struct WatchHomeView: View {
                     withAnimation {
                         if let lastId = viewModel.messages.last?.id {
                             proxy.scrollTo(lastId, anchor: .bottom)
-                        } else {
-                            proxy.scrollTo("loading", anchor: .bottom)
                         }
                     }
                 }

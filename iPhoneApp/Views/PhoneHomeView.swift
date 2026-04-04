@@ -2,19 +2,8 @@ import SwiftUI
 
 struct PhoneHomeView: View {
     @EnvironmentObject var connectivity: PhoneConnectivityService
-    @State private var apiKey = ""
-    @State private var savedKey: String?
-    @State private var selectedModel = AppConstants.defaultModel
-    @State private var isSyncing = false
-    @State private var syncSuccess = false
+    @EnvironmentObject var modelManager: ModelManager
     @State private var showOnboarding = !UserDefaults.standard.bool(forKey: AppConstants.onboardingCompletedKey)
-    @State private var validationState: ValidationState = .idle
-    @State private var showAlert = false
-    @State private var alertMessage = ""
-
-    enum ValidationState {
-        case idle, validating, valid, invalid(String)
-    }
 
     var body: some View {
         NavigationStack {
@@ -40,146 +29,144 @@ struct PhoneHomeView: View {
                     Text("接続状態")
                 }
 
-                // MARK: - API Key
+                // MARK: - Model Status
                 Section {
-                    if let key = savedKey {
+                    if modelManager.isModelReady {
                         HStack {
-                            Image(systemName: "checkmark.shield.fill")
+                            Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("APIキー設定済み")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("モデル準備完了")
+                                    .font(.subheadline.bold())
+                                Text(AppConstants.modelDisplayName)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                             Spacer()
-                            Text("...\(String(key.suffix(8)))")
+                            Image(systemName: "brain")
+                                .foregroundColor(.cyan)
+                        }
+
+                        Button("モデルを削除", role: .destructive) {
+                            modelManager.deleteModel()
+                            LocalLLMService.shared.unloadModel()
+                        }
+                        .font(.caption)
+                    } else if modelManager.isDownloading {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("モデルダウンロード中...")
+                                    .font(.subheadline.bold())
+                                Spacer()
+                                Text(modelManager.downloadedSizeText)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            ProgressView(value: modelManager.downloadProgress)
+                                .tint(.cyan)
+                            Text("\(Int(modelManager.downloadProgress * 100))%")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                        }
-                        Button("APIキーを変更", role: .destructive) {
-                            savedKey = nil
-                            apiKey = ""
+
+                            Button("キャンセル", role: .destructive) {
+                                modelManager.cancelDownload()
+                            }
+                            .font(.caption)
                         }
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Google AI Studio APIキー")
+                            HStack {
+                                Image(systemName: "arrow.down.circle")
+                                    .foregroundColor(.orange)
+                                Text("モデル未準備")
+                                    .font(.subheadline.bold())
+                            }
+                            Text("初回のみモデルのダウンロードが必要です（\(AppConstants.modelSizeDescription)）。Wi-Fi推奨。")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            SecureField("APIキーを入力", text: $apiKey)
-                                .textFieldStyle(.roundedBorder)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
 
-                            HStack {
-                                Button {
-                                    Task { await validateAndSaveKey() }
-                                } label: {
-                                    HStack {
-                                        if case .validating = validationState {
-                                            ProgressView()
-                                                .scaleEffect(0.8)
-                                        }
-                                        Text("検証して保存")
-                                    }
+                            Button {
+                                modelManager.startDownload()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.down.to.line")
+                                    Text("モデルをダウンロード")
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.cyan)
-                                .disabled(apiKey.isEmpty || isValidating)
-
-                                Spacer()
-
-                                Link(destination: URL(string: "https://aistudio.google.com/apikey")!) {
-                                    Label("キー取得", systemImage: "arrow.up.right.square")
-                                        .font(.caption)
-                                }
+                                .frame(maxWidth: .infinity)
                             }
-
-                            if case .invalid(let msg) = validationState {
-                                Text(msg)
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.cyan)
                         }
                     }
+
+                    if let error = modelManager.error {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 } header: {
-                    Text("APIキー")
+                    Text("AIモデル（ローカル）")
                 } footer: {
-                    Text("Google AI Studio から無料のAPIキーを取得できます。Gemma モデルを使用します。")
+                    Text("推論はすべて iPhone 上で実行されます。APIキーや課金は不要です。")
                 }
 
-                // MARK: - Model Selection
-                Section {
-                    Picker("モデル", selection: $selectedModel) {
-                        ForEach(AppConstants.availableModels, id: \.id) { model in
-                            VStack(alignment: .leading) {
-                                Text(model.name)
-                                Text(model.description)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .tag(model.id)
-                        }
-                    }
-                    .onChange(of: selectedModel) { _, newValue in
-                        UserDefaults.standard.set(newValue, forKey: AppConstants.selectedModelKey)
-                    }
-                } header: {
-                    Text("AIモデル")
-                }
-
-                // MARK: - Sync
-                Section {
-                    Button {
-                        syncToWatch()
-                    } label: {
-                        HStack {
-                            Image(systemName: syncSuccess ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                                .foregroundColor(syncSuccess ? .green : .cyan)
-                            Text(syncSuccess ? "同期完了" : "Watchに設定を送信")
-                            if isSyncing {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(savedKey == nil || isSyncing)
-                } header: {
-                    Text("同期")
-                } footer: {
-                    Text("APIキーとモデル設定をApple Watchに送信します。")
-                }
-
-                // MARK: - How to Use
+                // MARK: - How It Works
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        stepRow(number: 1, text: "上のリンクからGoogle AI StudioのAPIキーを取得")
-                        stepRow(number: 2, text: "APIキーを入力して「検証して保存」をタップ")
-                        stepRow(number: 3, text: "「Watchに設定を送信」をタップ")
-                        stepRow(number: 4, text: "Apple Watchで瞬愛を起動して質問")
+                        stepRow(number: 1, text: "「モデルをダウンロード」をタップ（初回のみ）")
+                        stepRow(number: 2, text: "ダウンロード完了を待つ")
+                        stepRow(number: 3, text: "Apple Watch で瞬愛を起動して質問")
+                        stepRow(number: 4, text: "iPhone がローカルで回答を生成")
                     }
                     .padding(.vertical, 4)
                 } header: {
                     Text("使い方")
                 }
+
+                // MARK: - Info
+                Section {
+                    HStack {
+                        Image(systemName: "wifi.slash")
+                            .foregroundColor(.secondary)
+                        Text("推論時にネットワーク通信なし")
+                            .font(.caption)
+                    }
+                    HStack {
+                        Image(systemName: "yensign.circle")
+                            .foregroundColor(.secondary)
+                        Text("課金・APIキー不要")
+                            .font(.caption)
+                    }
+                    HStack {
+                        Image(systemName: "brain")
+                            .foregroundColor(.secondary)
+                        Text(AppConstants.modelDisplayName)
+                            .font(.caption)
+                    }
+                } header: {
+                    Text("v2 無料運用版")
+                }
             }
             .navigationTitle("瞬愛 SyunAI")
-            .onAppear {
-                loadSavedKey()
-                selectedModel = UserDefaults.standard.string(forKey: AppConstants.selectedModelKey) ?? AppConstants.defaultModel
-            }
             .sheet(isPresented: $showOnboarding) {
                 OnboardingView(isPresented: $showOnboarding)
             }
-            .alert("エラー", isPresented: $showAlert) {
-                Button("OK") {}
-            } message: {
-                Text(alertMessage)
+            .onAppear {
+                // Auto-load model if already downloaded
+                if modelManager.modelFileExists && !LocalLLMService.shared.isModelLoaded {
+                    Task {
+                        try? await modelManager.loadModelIntoService()
+                        connectivity.sendModelStatusToWatch(isReady: true)
+                    }
+                }
+            }
+            .onChange(of: modelManager.isModelReady) { _, isReady in
+                connectivity.sendModelStatusToWatch(isReady: isReady)
             }
         }
     }
 
     // MARK: - Helpers
-
-    private var isValidating: Bool {
-        if case .validating = validationState { return true }
-        return false
-    }
 
     private func stepRow(number: Int, text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
@@ -189,85 +176,6 @@ struct PhoneHomeView: View {
                 .background(Circle().fill(.cyan.opacity(0.2)))
             Text(text)
                 .font(.subheadline)
-        }
-    }
-
-    private func loadSavedKey() {
-        savedKey = PhoneKeychainService.getAPIKey()
-    }
-
-    private func validateAndSaveKey() async {
-        validationState = .validating
-        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Quick validation via API call
-        let urlString = "\(AppConstants.apiEndpoint)/\(AppConstants.defaultModel):generateContent?key=\(key)"
-        guard let url = URL(string: urlString) else {
-            validationState = .invalid("無効なキー形式です。")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
-
-        let body = GemmaRequest(
-            contents: [GemmaContent(role: "user", parts: [GemmaPart(text: "Hi")])],
-            systemInstruction: nil,
-            generationConfig: GenerationConfig(maxOutputTokens: 5, temperature: 0.1)
-        )
-
-        do {
-            request.httpBody = try JSONEncoder().encode(body)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let httpResp = response as? HTTPURLResponse
-
-            switch httpResp?.statusCode {
-            case 200:
-                _ = PhoneKeychainService.saveAPIKey(key)
-                savedKey = key
-                apiKey = ""
-                validationState = .valid
-            case 400:
-                // API key is valid but request might be malformed - still save
-                let errResp = try? JSONDecoder().decode(GemmaResponse.self, from: data)
-                if errResp?.error?.message?.contains("API key") == true {
-                    validationState = .invalid("APIキーが無効です。")
-                } else {
-                    _ = PhoneKeychainService.saveAPIKey(key)
-                    savedKey = key
-                    apiKey = ""
-                    validationState = .valid
-                }
-            case 401, 403:
-                validationState = .invalid("APIキーが無効です。正しいキーを入力してください。")
-            default:
-                validationState = .invalid("検証に失敗しました (HTTP \(httpResp?.statusCode ?? 0))")
-            }
-        } catch {
-            validationState = .invalid("ネットワークエラー: \(error.localizedDescription)")
-        }
-    }
-
-    private func syncToWatch() {
-        guard let key = savedKey else { return }
-        isSyncing = true
-        syncSuccess = false
-
-        connectivity.sendSettingsToWatch(
-            apiKey: key,
-            model: selectedModel,
-            systemPrompt: UserDefaults.standard.string(forKey: AppConstants.systemPromptKey) ?? AppConstants.defaultSystemPrompt
-        )
-
-        // Visual feedback
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            isSyncing = false
-            syncSuccess = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                syncSuccess = false
-            }
         }
     }
 }
@@ -285,18 +193,19 @@ struct OnboardingView: View {
                 .font(.system(size: 60))
                 .foregroundColor(.cyan)
 
-            Text("瞬愛 SyunAI")
+            Text("瞬愛 SyunAI v2")
                 .font(.largeTitle.bold())
 
-            Text("Apple Watchで\n瞬時にAIに聞ける")
+            Text("Apple Watchで\n瞬時にAIに聞ける\n完全ローカル・無料")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 16) {
                 featureRow(icon: "bolt.fill", title: "即起動", description: "手首を上げてすぐ質問")
-                featureRow(icon: "character.textbox", title: "漢字・スペル", description: "読みやスペルを瞬時に確認")
-                featureRow(icon: "globe", title: "翻訳・計算", description: "ちょっとした調べものに")
+                featureRow(icon: "brain", title: "ローカル推論", description: "APIキー不要・課金なし")
+                featureRow(icon: "wifi.slash", title: "オフライン対応", description: "ネットワーク不要で推論")
+                featureRow(icon: "person.2.fill", title: "配布可能", description: "友達にそのまま共有")
             }
             .padding(.horizontal, 32)
 

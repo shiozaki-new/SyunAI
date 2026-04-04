@@ -7,14 +7,26 @@ class WatchChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var hasAPIKey = false
+    @Published var isModelReady = false
+    @Published var isPhoneReachable = false
 
     private let connectivityService = WatchConnectivityService.shared
-    private let maxHistory = 10
 
     init() {
         loadMessages()
-        checkAPIKey()
+        checkModelStatus()
+
+        // Observe connectivity changes
+        connectivityService.onModelStatusUpdate = { [weak self] ready in
+            Task { @MainActor in
+                self?.isModelReady = ready
+            }
+        }
+        connectivityService.onReachabilityChange = { [weak self] reachable in
+            Task { @MainActor in
+                self?.isPhoneReachable = reachable
+            }
+        }
     }
 
     // MARK: - Send Message
@@ -28,8 +40,19 @@ class WatchChatViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
+        // Try local utility first (date, calculation, etc.)
+        if let localResult = LocalUtility.tryHandle(trimmed) {
+            let assistantMessage = ChatMessage(content: localResult, role: .assistant)
+            messages.append(assistantMessage)
+            isLoading = false
+            playHaptic()
+            saveMessages()
+            return
+        }
+
+        // Relay to iPhone for LLM inference
         do {
-            let response = try await callAPI(userInput: trimmed)
+            let response = try await requestInference(userInput: trimmed)
             let assistantMessage = ChatMessage(content: response, role: .assistant)
             messages.append(assistantMessage)
             playHaptic()
@@ -41,83 +64,29 @@ class WatchChatViewModel: ObservableObject {
         saveMessages()
     }
 
-    // MARK: - API Call
+    // MARK: - iPhone Inference Relay
 
-    private func callAPI(userInput: String) async throws -> String {
-        guard let apiKey = KeychainService.getAPIKey() else {
-            throw SyunAIError.noAPIKey
-        }
-
-        let model = UserDefaults.standard.string(forKey: AppConstants.selectedModelKey) ?? AppConstants.defaultModel
-        let systemPrompt = UserDefaults.standard.string(forKey: AppConstants.systemPromptKey) ?? AppConstants.defaultSystemPrompt
-
-        let urlString = "\(AppConstants.apiEndpoint)/\(model):generateContent?key=\(apiKey)"
-        guard let url = URL(string: urlString) else {
-            throw SyunAIError.invalidURL
-        }
-
-        // Build conversation contents
-        var contents: [GemmaContent] = []
-
-        // Add recent history
-        let recentMessages = messages.suffix(maxHistory).filter { $0.role != .system }
-        for msg in recentMessages {
-            contents.append(GemmaContent(
-                role: msg.role == .user ? "user" : "model",
-                parts: [GemmaPart(text: msg.content)]
-            ))
-        }
-
-        // Add current user input
-        contents.append(GemmaContent(
-            role: "user",
-            parts: [GemmaPart(text: userInput)]
-        ))
-
-        let systemInstruction = GemmaContent(
-            role: nil,
-            parts: [GemmaPart(text: systemPrompt)]
-        )
-
-        let request = GemmaRequest(
-            contents: contents,
-            systemInstruction: systemInstruction,
-            generationConfig: GenerationConfig(
-                maxOutputTokens: AppConstants.watchMaxTokens,
-                temperature: 0.7
-            )
-        )
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.timeoutInterval = 15
-
-        let encoder = JSONEncoder()
-        urlRequest.httpBody = try encoder.encode(request)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw SyunAIError.networkError
-        }
-
-        switch httpResponse.statusCode {
-        case 200:
-            let gemmaResponse = try JSONDecoder().decode(GemmaResponse.self, from: data)
-            if let text = gemmaResponse.candidates?.first?.content?.parts.first?.text {
-                return text
+    private func requestInference(userInput: String) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            connectivityService.sendInferenceRequest(userInput) { result in
+                switch result {
+                case .success(let response):
+                    continuation.resume(returning: response)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
             }
-            throw SyunAIError.emptyResponse
-        case 400:
-            let errResp = try? JSONDecoder().decode(GemmaResponse.self, from: data)
-            throw SyunAIError.apiError(errResp?.error?.message ?? "Bad Request")
-        case 401, 403:
-            throw SyunAIError.unauthorized
-        case 429:
-            throw SyunAIError.rateLimited
-        default:
-            throw SyunAIError.serverError(httpResponse.statusCode)
+        }
+    }
+
+    // MARK: - Model Status
+
+    func checkModelStatus() {
+        isPhoneReachable = connectivityService.isReachable
+        connectivityService.requestModelStatus { [weak self] ready in
+            Task { @MainActor in
+                self?.isModelReady = ready
+            }
         }
     }
 
@@ -140,10 +109,6 @@ class WatchChatViewModel: ObservableObject {
         messages = saved
     }
 
-    func checkAPIKey() {
-        hasAPIKey = KeychainService.getAPIKey() != nil
-    }
-
     // MARK: - Haptics
 
     private func playHaptic() {
@@ -156,25 +121,17 @@ class WatchChatViewModel: ObservableObject {
 // MARK: - Errors
 
 enum SyunAIError: LocalizedError {
-    case noAPIKey
-    case invalidURL
-    case networkError
-    case emptyResponse
-    case apiError(String)
-    case unauthorized
-    case rateLimited
-    case serverError(Int)
+    case phoneNotReachable
+    case modelNotReady
+    case inferenceTimeout
+    case inferenceError(String)
 
     var errorDescription: String? {
         switch self {
-        case .noAPIKey: return "APIキーが設定されていません。iPhoneアプリから設定してください。"
-        case .invalidURL: return "無効なURLです。"
-        case .networkError: return "ネットワークエラーです。"
-        case .emptyResponse: return "応答が空です。"
-        case .apiError(let msg): return "APIエラー: \(msg)"
-        case .unauthorized: return "APIキーが無効です。"
-        case .rateLimited: return "リクエスト制限に達しました。少し待ってください。"
-        case .serverError(let code): return "サーバーエラー(\(code))"
+        case .phoneNotReachable: return "iPhoneに接続できません。近くにiPhoneがあるか確認してください。"
+        case .modelNotReady: return "モデルが準備されていません。iPhoneアプリでモデルをダウンロードしてください。"
+        case .inferenceTimeout: return "応答がタイムアウトしました。"
+        case .inferenceError(let msg): return msg
         }
     }
 }

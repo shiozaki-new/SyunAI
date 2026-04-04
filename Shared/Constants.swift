@@ -1,16 +1,16 @@
 import Foundation
 
 enum AppConstants {
-    // MARK: - API Configuration
-    // Google AI Studio (Gemini API) - supports Gemma models
-    static let apiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
-    static let defaultModel = "gemma-3-4b-it"
+    // MARK: - App Info
+    static let appVersion = "2.0.0"
+    static let appName = "瞬愛 SyunAI"
 
-    static let availableModels: [(id: String, name: String, description: String)] = [
-        ("gemma-3-4b-it", "Gemma 3 4B", "高速・軽量"),
-        ("gemma-3-12b-it", "Gemma 3 12B", "バランス型"),
-        ("gemma-3-27b-it", "Gemma 3 27B", "高精度")
-    ]
+    // MARK: - Local Model Configuration
+    // Gemma 4 E2B の GGUF 公開後に URL とファイル名を差し替えること
+    static let modelFileName = "gemma-2-2b-it-Q4_K_M.gguf"
+    static let modelDisplayName = "Gemma 2 2B (ローカル)"
+    static let modelDownloadURL = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf"
+    static let modelSizeDescription = "約1.5GB"
 
     // MARK: - System Prompt
     static let defaultSystemPrompt = """
@@ -21,31 +21,28 @@ enum AppConstants {
     日本語で回答してください。
     """
 
-    // MARK: - Token Limits
-    static let watchMaxTokens = 200
-    static let phoneMaxTokens = 500
-
-    // MARK: - Keychain
-    static let keychainService = "com.syunai.apikey"
-    static let keychainAccount = "google-ai"
+    // MARK: - Inference Settings
+    static let maxTokens: Int32 = 200
+    static let temperature: Float = 0.7
+    static let contextSize: Int32 = 2048
+    static let repeatPenalty: Float = 1.1
 
     // MARK: - UserDefaults Keys
-    static let selectedModelKey = "selected_model"
     static let systemPromptKey = "system_prompt"
     static let hapticEnabledKey = "haptic_feedback_enabled"
-    static let maxHistoryKey = "max_history_count"
     static let onboardingCompletedKey = "onboarding_completed"
-    static let lastSyncDateKey = "last_sync_date"
+    static let modelReadyKey = "model_ready"
 
     // MARK: - WatchConnectivity Keys
-    static let wcAPIKeyKey = "api_key"
-    static let wcModelKey = "selected_model"
-    static let wcSystemPromptKey = "system_prompt"
-    static let wcSettingsSyncKey = "settings_sync"
+    static let wcInferenceRequestKey = "inference_request"
+    static let wcInferenceResponseKey = "inference_response"
+    static let wcInferenceErrorKey = "inference_error"
+    static let wcModelStatusKey = "model_status"
+    static let wcModelStatusRequestKey = "model_status_request"
 
     // MARK: - Quick Prompts (Watch)
     static let quickPrompts: [(emoji: String, label: String, prompt: String)] = [
-        ("", "漢字", "この漢字の読みを教えて: "),
+        ("字", "漢字", "この漢字の読みを教えて: "),
         ("🔤", "英語", "英語のスペルを教えて: "),
         ("📖", "意味", "この言葉の意味を簡潔に: "),
         ("🔢", "計算", "計算して: "),

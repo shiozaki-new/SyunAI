@@ -10,7 +10,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.0.0"
+    MARKETING_VERSION: "2.0.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: M878XBQ25U
     CODE_SIGN_STYLE: Automatic
@@ -63,3 +63,5 @@ targets:
     dependencies:
       - target: SyunAI Watch App
         embed: watch
+      - framework: Frameworks/llama.xcframework
+        embed: true

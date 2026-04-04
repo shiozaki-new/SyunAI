@@ -1,6 +1,8 @@
 import Foundation
 import WatchConnectivity
 
+/// iPhone 側 WatchConnectivity サービス
+/// Watch からの推論リクエストを受け取り、ローカル LLM で処理して返す
 class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
     @Published var isWatchReachable = false
     @Published var isWatchAppInstalled = false
@@ -14,24 +16,18 @@ class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
         }
     }
 
-    // MARK: - Send Settings
+    // MARK: - Send Model Status to Watch
 
-    func sendSettingsToWatch(apiKey: String, model: String, systemPrompt: String) {
+    func sendModelStatusToWatch(isReady: Bool) {
         let payload: [String: Any] = [
-            AppConstants.wcAPIKeyKey: apiKey,
-            AppConstants.wcModelKey: model,
-            AppConstants.wcSystemPromptKey: systemPrompt
+            AppConstants.wcModelStatusKey: isReady
         ]
-
         let session = WCSession.default
-
-        // Guaranteed delivery
-        session.transferUserInfo(payload)
-
-        // Also try immediate delivery
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
         }
+        // Also update application context for guaranteed delivery
+        try? session.updateApplicationContext(payload)
     }
 
     // MARK: - WCSessionDelegate
@@ -61,26 +57,49 @@ class PhoneConnectivityService: NSObject, ObservableObject, WCSessionDelegate {
         }
     }
 
-    // Handle sync requests from Watch
+    // MARK: - Handle Watch Requests
+
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        if message[AppConstants.wcSettingsSyncKey] != nil {
-            // Watch is requesting settings - send if available
-            if let apiKey = PhoneKeychainService.getAPIKey() {
-                let model = UserDefaults.standard.string(forKey: AppConstants.selectedModelKey) ?? AppConstants.defaultModel
-                let prompt = UserDefaults.standard.string(forKey: AppConstants.systemPromptKey) ?? AppConstants.defaultSystemPrompt
-                sendSettingsToWatch(apiKey: apiKey, model: model, systemPrompt: prompt)
-            }
-        }
+        handleMessage(message, replyHandler: nil)
     }
 
     func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
-        if message[AppConstants.wcSettingsSyncKey] != nil {
-            if let apiKey = PhoneKeychainService.getAPIKey() {
-                let model = UserDefaults.standard.string(forKey: AppConstants.selectedModelKey) ?? AppConstants.defaultModel
-                let prompt = UserDefaults.standard.string(forKey: AppConstants.systemPromptKey) ?? AppConstants.defaultSystemPrompt
-                sendSettingsToWatch(apiKey: apiKey, model: model, systemPrompt: prompt)
+        handleMessage(message, replyHandler: replyHandler)
+    }
+
+    private func handleMessage(_ message: [String: Any], replyHandler: (([String: Any]) -> Void)?) {
+        // Watch is requesting model status
+        if message[AppConstants.wcModelStatusRequestKey] != nil {
+            let isReady = UserDefaults.standard.bool(forKey: AppConstants.modelReadyKey)
+            replyHandler?([AppConstants.wcModelStatusKey: isReady])
+            return
+        }
+
+        // Watch is requesting inference
+        guard let userInput = message[AppConstants.wcInferenceRequestKey] as? String else {
+            replyHandler?([AppConstants.wcInferenceErrorKey: "不正なリクエストです"])
+            return
+        }
+
+        // Try local utility first
+        if let localResult = LocalUtility.tryHandle(userInput) {
+            replyHandler?([AppConstants.wcInferenceResponseKey: localResult])
+            return
+        }
+
+        // Run LLM inference
+        Task {
+            do {
+                let systemPrompt = UserDefaults.standard.string(forKey: AppConstants.systemPromptKey)
+                    ?? AppConstants.defaultSystemPrompt
+                let response = try await LocalLLMService.shared.generate(
+                    prompt: userInput,
+                    systemPrompt: systemPrompt
+                )
+                replyHandler?([AppConstants.wcInferenceResponseKey: response])
+            } catch {
+                replyHandler?([AppConstants.wcInferenceErrorKey: error.localizedDescription])
             }
         }
-        replyHandler(["status": "ok"])
     }
 }
